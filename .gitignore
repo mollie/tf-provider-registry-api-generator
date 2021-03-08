@@ -1,0 +1,6 @@
+dist/
+.terraform/
+terraform.tfstate*
+tf-provider-registry-api-generator
+.idea/
+*.iml

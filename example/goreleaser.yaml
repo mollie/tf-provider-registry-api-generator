@@ -1,35 +1,38 @@
+before:
+  hooks:
+    - gpg --batch --import '{{ .Env.GPG_PRIVATE_KEY }}'
+
 builds:
-- env:
-    - CGO_ENABLED=0
-  mod_timestamp: '{{ .CommitTimestamp }}'
-  flags:
-    - -trimpath
-  ldflags:
-    - '-s -w -X main.version={{.Version}} -X main.commit={{.Commit}}'
-  goos:
-    - freebsd
-    - windows
-    - linux
-    - darwin
-  goarch:
-    - amd64
-    - '386'
-    - arm
-    - arm64
-  ignore:
-    - goos: darwin
-      goarch: '386'
-  binary: '{{ .ProjectName }}_v{{ .Version }}'
+  - env:
+      - CGO_ENABLED=0
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    flags:
+      - -trimpath
+    ldflags:
+      - '-s -w -X main.version={{.Version}} -X main.commit={{.Commit}}'
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+#      - arm64
+    ignore:
+      - goos: darwin
+        goarch: '386'
+    binary: '{{ .ProjectName }}_v{{ .Version }}'
 archives:
-- format: zip
-  name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+  - format: zip
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
 checksum:
   name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
   algorithm: sha256
 signs:
   - artifacts: checksum
     args:
-      - "--batch"
+      - "--pinentry-mode"
+      - "loopback"
+      - "--passphrase-file"
+      - "{{ .Env.GPG_PASSPHRASE }}"
       - "--local-user"
       - "{{ .Env.GPG_FINGERPRINT }}"
       - "--output"
@@ -39,10 +42,27 @@ signs:
 
 blobs:
   - provider: gs
-    bucket: "{{ .Env.TF_REGISTRY_BUCKET }}"
-    folder: 'binaries/{{ .ProjectName }}/{{ .Tag }}'
+    bucket: '{{ .Env.TF_REGISTRY_BUCKET }}'
+    folder: 'binaries/{{ .Env.PROVIDER_NAMESPACE }}/{{ .ProjectName }}/{{ .Tag }}'
+
+publishers:
+  - name: generate-tf-api-documents
+    cmd: >-
+      tf-provider-registry-api-generator
+      --use-default-credentials
+      --bucket-name '{{ .Env.TF_REGISTRY_BUCKET }}'
+      --prefix 'binaries/{{ .Env.PROVIDER_NAMESPACE }}/{{ .ProjectName }}/{{ .Tag }}'
+      --namespace '{{ .Env.PROVIDER_NAMESPACE }}'
+      --fingerprint '{{ .Env.GPG_FINGERPRINT }}'
+      --url '{{ .Env.REGISTRY_URL }}'
+      --protocols '{{ .Env.PROVIDER_PROTOCOLS }}'
+    env:
+      - "PATH={{ .Env.PATH }}"
+      - "GOOGLE_APPLICATION_CREDENTIALS={{ .Env.GOOGLE_APPLICATION_CREDENTIALS }}"
+
 
 release:
   draft: true
+  disable: true
 changelog:
   skip: true
